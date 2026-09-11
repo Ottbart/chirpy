@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sync/atomic"
+	"slices"
+	"strings"
 )
-
-type apiConfig struct {
-	fileserverHits atomic.Int32
-}
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -48,8 +45,9 @@ func (cfg *apiConfig) handlerResetCounter(w http.ResponseWriter, r *http.Request
 
 func (cfg *apiConfig) handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 	type Chirp struct {
-		Body  string `json:"body"`
-		Valid bool   `json:"valid"`
+		Body        string `json:"body"`
+		Valid       bool   `json:"valid"`
+		CleanedBody string `json:"cleaned_body"`
 	}
 	// decode json from request
 	decoder := json.NewDecoder(r.Body)
@@ -71,10 +69,27 @@ func (cfg *apiConfig) handlerValidateChirp(w http.ResponseWriter, r *http.Reques
 		}
 		return
 	}
+	chirp.CleanedBody = cleanText(chirp.Body)
+	chirp.Valid = true
 
 	//response OK
-	err = respondWithJSON(w, 200, Chirp{Valid: true})
+	err = respondWithJSON(w, 200, chirp)
 	if err != nil {
 		log.Printf("error sending response: %v", err)
 	}
+}
+
+func cleanText(m string) string {
+	badWords := []string{
+		"kerfuffle",
+		"sharbert",
+		"fornax",
+	}
+	words := strings.Split(m, " ")
+	for i, word := range words {
+		if slices.Contains(badWords, strings.ToLower(word)) {
+			words[i] = "****"
+		}
+	}
+	return strings.Join(words, " ")
 }

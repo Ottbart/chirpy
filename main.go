@@ -1,18 +1,45 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"net/http"
+	"os"
+	"sync/atomic"
+
+	"github.com/Ottbart/chirpy/internal/database"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
+type apiConfig struct {
+	fileserverHits atomic.Int32
+	db             *database.Queries
+}
+
 func main() {
+	//get data from .env
+	godotenv.Load()
+
+	//open db connection
+	dbURL := os.Getenv("DB_URL")
+	dbConnect, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatalf("Error open database connection: %v", err)
+	}
+	//create new database
+	dbQueries := database.New(dbConnect)
+	apiCfg := apiConfig{
+		fileserverHits: atomic.Int32{},
+		db:             dbQueries,
+	}
+
+	//create http.Server
 	mux := http.NewServeMux()
 	srv := &http.Server{
 		Addr:    ":8080",
 		Handler: mux,
 	}
-
-	apiCfg := apiConfig{}
 
 	//add handler for the root path
 	//mux.Handle("/app/", apiCfg.middlewareMetricsInc(handler))
