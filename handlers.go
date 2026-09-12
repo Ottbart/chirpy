@@ -36,11 +36,22 @@ func (cfg *apiConfig) handlerReadRequestCount(w http.ResponseWriter, r *http.Req
 	w.Write([]byte(site))
 }
 
-func (cfg *apiConfig) handlerResetCounter(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) handlerReset(w http.ResponseWriter, r *http.Request) {
+	if cfg.Platform != "dev" {
+		log.Fatalln("can't reset outside PLATFORM=dev")
+		respondWithError(w, http.StatusForbidden, "can't reset outside PLATFORM=dev")
+		return
+	}
 	cfg.fileserverHits.Store(0)
+	err := cfg.db.DeleteUser(r.Context())
+	if err != nil {
+		log.Fatalf("error deleting users from db: %v", err)
+		respondWithError(w, 500, "error deleting users from database")
+	}
 	w.Header().Add("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Hits counter reset to 0"))
+
 }
 
 func (cfg *apiConfig) handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
@@ -92,4 +103,36 @@ func cleanText(m string) string {
 		}
 	}
 	return strings.Join(words, " ")
+}
+
+func (cfg *apiConfig) handlerAddUser(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		Email string `json:"email"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	var req request
+	err := decoder.Decode(&req)
+	if err != nil {
+		log.Printf("error decoding email: %v", err)
+		respondWithError(w, http.StatusInternalServerError, "error decoding email")
+		return
+	}
+
+	dbUser, err := cfg.db.CreateUser(r.Context(), req.Email)
+	if err != nil {
+		log.Printf("error creating user: %v", err)
+		respondWithError(w, http.StatusInternalServerError, "error creating user")
+		return
+	}
+
+	user := User{
+		ID:        dbUser.ID,
+		CreatedAt: dbUser.CreatedAt,
+		UpdatedAt: dbUser.UpdatedAt,
+		Email:     dbUser.Email,
+	}
+	if err := respondWithJSON(w, http.StatusCreated, user); err != nil {
+		log.Printf("error sending response: %v", err)
+	}
 }
