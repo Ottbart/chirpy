@@ -6,44 +6,83 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Ottbart/chirpy/internal/auth"
+	"github.com/Ottbart/chirpy/internal/database"
 	"github.com/google/uuid"
 )
 
 type User struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Email     string    `json:"email"`
+	ID             uuid.UUID `json:"id"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	Email          string    `json:"email"`
+	HashedPassword string    `json:"password"`
 }
 
 func (cfg *apiConfig) handlerAddUser(w http.ResponseWriter, r *http.Request) {
 	type request struct {
-		Email string `json:"email"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
 	var req request
 	err := decoder.Decode(&req)
 	if err != nil {
-		log.Printf("error decoding email: %v", err)
-		respondWithError(w, http.StatusInternalServerError, "error decoding email")
+		respondWithError(w, http.StatusInternalServerError, "error decoding user credentials")
+		return
+	}
+	hashedPw, err := auth.HashPassword(req.Password)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error hashing password")
 		return
 	}
 
-	dbUser, err := cfg.db.CreateUser(r.Context(), req.Email)
+	dbUser, err := cfg.db.CreateUser(r.Context(), database.CreateUserParams{
+		Email:          req.Email,
+		HashedPassword: hashedPw,
+	})
 	if err != nil {
 		log.Printf("error creating user: %v", err)
 		respondWithError(w, http.StatusInternalServerError, "error creating user")
 		return
 	}
 
-	user := User{
+	respondWithJSON(w, http.StatusCreated, User{
 		ID:        dbUser.ID,
 		CreatedAt: dbUser.CreatedAt,
 		UpdatedAt: dbUser.UpdatedAt,
 		Email:     dbUser.Email,
+	})
+}
+
+func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
-	if err := respondWithJSON(w, http.StatusCreated, user); err != nil {
-		log.Printf("error sending response: %v", err)
+
+	decoder := json.NewDecoder(r.Body)
+	var req request
+	err := decoder.Decode(&req)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error decoding user credentials")
+		return
 	}
+
+	user, err := cfg.db.GetUserByEmail(r.Context(), req.Email)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Incorrect email or password")
+		return
+	}
+	if ok, err := auth.CheckPasswordHash(req.Password, user.HashedPassword); !ok || err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Incorrect email or password")
+		return
+	}
+	respondWithJSON(w, http.StatusOK, User{
+		ID:        user.ID,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Email:     user.Email,
+	})
 }
