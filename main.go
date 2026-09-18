@@ -16,14 +16,21 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	db             *database.Queries
 	Platform       string
+	Secret         string
 }
 
 func main() {
 	//get data from .env
-	godotenv.Load()
+	if err := godotenv.Load(); err != nil {
+		log.Fatalf("Error loading .env: %v", err)
+	}
 	platform := os.Getenv("PLATFORM")
 	if platform == "" {
 		log.Fatal("PLATFORM must be set")
+	}
+	secret := os.Getenv("SECRET")
+	if secret == "" {
+		log.Fatal("SECRET must be set")
 	}
 
 	//open db connection
@@ -38,6 +45,7 @@ func main() {
 		fileserverHits: atomic.Int32{},
 		db:             dbQueries,
 		Platform:       platform,
+		Secret:         secret,
 	}
 
 	//create http.Server

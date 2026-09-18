@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Ottbart/chirpy/internal/auth"
 	"github.com/Ottbart/chirpy/internal/database"
 	"github.com/google/uuid"
 )
@@ -47,18 +48,30 @@ func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request) {
 	type request struct {
-		Body        string    `json:"body"`
-		UserID      uuid.UUID `json:"user_id"`
-		BodyCleaned string    `json:"body_cleaned"`
+		Body        string `json:"body"`
+		BodyCleaned string `json:"body_cleaned"`
+	}
+
+	// check authentication
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid auth token")
+		return
+	}
+	userId, err := auth.ValidateJWT(token, cfg.Secret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid auth token")
+		return
 	}
 
 	// decode json from request
 	decoder := json.NewDecoder(r.Body)
 	req := request{}
-	err := decoder.Decode(&req)
+	err = decoder.Decode(&req)
 	if err != nil {
 		log.Printf("error decoding chirp: %v", err)
 		respondWithError(w, http.StatusInternalServerError, "error decoding chirp")
+		return
 	}
 
 	//check if chirp has max 140 characters
@@ -73,7 +86,7 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 	//write chirp to database
 	chirp, err := cfg.db.CreateChirp(r.Context(), database.CreateChirpParams{
 		Body:   req.BodyCleaned,
-		UserID: req.UserID,
+		UserID: userId,
 	})
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "error creating chirp")
