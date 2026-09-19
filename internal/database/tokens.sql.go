@@ -20,18 +20,19 @@ VALUES (
     NOW(),
     NOW(),
     $2,
-    NOW() + INTERVAL '60 days'
+    $3
 ) 
 RETURNING token, created_at, updated_at, user_id, expires_at, revoked_at
 `
 
 type AddRefreshTokenParams struct {
-	Token  string    `json:"token"`
-	UserID uuid.UUID `json:"user_id"`
+	Token     string    `json:"token"`
+	UserID    uuid.UUID `json:"user_id"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 func (q *Queries) AddRefreshToken(ctx context.Context, arg AddRefreshTokenParams) (RefreshToken, error) {
-	row := q.db.QueryRowContext(ctx, addRefreshToken, arg.Token, arg.UserID)
+	row := q.db.QueryRowContext(ctx, addRefreshToken, arg.Token, arg.UserID, arg.ExpiresAt)
 	var i RefreshToken
 	err := row.Scan(
 		&i.Token,

@@ -24,25 +24,12 @@ func CheckPasswordHash(password, hash string) (bool, error) {
 }
 
 func MakeJWT(userID uuid.UUID, tokenSecret string, expiresIn time.Duration) (string, error) {
-	/*
-		var mySigningKey []byte
-		mySigningKey = []byte(os.Getenv("KEY"))
-	*/
-
-	type MyCustomClaims struct {
-		Foo string `json:"foo"`
-		jwt.RegisteredClaims
-	}
-
-	claims := MyCustomClaims{
-		"bar",
-		jwt.RegisteredClaims{
-			// A usual scenario is to set the expiration time relative to the current time
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiresIn)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "chirpy-access",
-			Subject:   userID.String(),
-		},
+	claims := jwt.RegisteredClaims{
+		// A usual scenario is to set the expiration time relative to the current time
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiresIn)),
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		Issuer:    "chirpy-access",
+		Subject:   userID.String(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

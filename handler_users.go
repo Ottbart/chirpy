@@ -83,12 +83,6 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	const ExpiresIn = time.Hour
-	/*
-		ExpiresIn := time.Hour
-		if req.ExpiresInSeconds < 3600 && req.ExpiresInSeconds > 0 {
-			ExpiresIn = time.Duration(req.ExpiresInSeconds)
-		}
-	*/
 	token, err := auth.MakeJWT(user.ID, cfg.Secret, ExpiresIn)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "error creating JWT")
@@ -97,8 +91,9 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 
 	refreshToken := auth.MakeRefreshToken()
 	_, err = cfg.db.AddRefreshToken(r.Context(), database.AddRefreshTokenParams{
-		Token:  refreshToken,
-		UserID: user.ID,
+		Token:     refreshToken,
+		UserID:    user.ID,
+		ExpiresAt: time.Now().Add(ExpiresIn),
 	})
 	if err != nil {
 		log.Printf("error creating refresh token: %v", err)
