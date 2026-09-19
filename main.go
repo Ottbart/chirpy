@@ -67,6 +67,7 @@ func main() {
 	mux.HandleFunc("POST /api/login", apiCfg.handlerLogin)
 	mux.HandleFunc("POST /api/refresh", apiCfg.handlerRefreshToken)
 	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevokeToken)
+	mux.HandleFunc("PUT /api/users", apiCfg.handlerUpdateCredentials)
 
 	//start server
 	log.Println("Serving files from / on port 8080")
