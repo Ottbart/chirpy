@@ -34,7 +34,7 @@ func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 	var chirpID uuid.UUID
 	chirpID, err := uuid.Parse(r.PathValue("chirpID"))
 	if err != nil {
-		respondWithError(w, http.StatusNotFound, "invalid UUID")
+		respondWithError(w, http.StatusNotFound, "invalid cirp ID")
 		return
 	}
 	chirp, err := cfg.db.GetChirp(r.Context(), chirpID)
@@ -116,4 +116,45 @@ func cleanText(m string) string {
 		}
 	}
 	return strings.Join(words, " ")
+}
+
+func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, r *http.Request) {
+	//authenticate user
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+	}
+
+	userId, err := auth.ValidateJWT(token, cfg.Secret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+	}
+
+	//get chirp from request
+	var chirpID uuid.UUID
+	chirpID, err = uuid.Parse(r.PathValue("chirpID"))
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "invalid cirp ID")
+		return
+	}
+
+	//get chirp from database and check matching user_id
+	chirp, err := cfg.db.GetChirp(r.Context(), chirpID)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "chirp id doesn't exist")
+		return
+	}
+
+	if chirp.UserID != userId {
+		respondWithError(w, http.StatusForbidden, "not allowed to delete chirp from other users")
+		return
+	}
+
+	//delete chirp and respond
+	_, err = cfg.db.DeleteChirp(r.Context(), chirp.ID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "can't delete chirp")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -19,6 +19,7 @@ type User struct {
 	HashedPassword string    `json:"password"`
 	Token          string    `json:"token"`
 	RefreshToken   string    `json:"refresh_token"`
+	IsChirpyRed    bool      `json:"is_chirpy_red"`
 }
 
 func (cfg *apiConfig) handlerAddUser(w http.ResponseWriter, r *http.Request) {
@@ -51,10 +52,11 @@ func (cfg *apiConfig) handlerAddUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondWithJSON(w, http.StatusCreated, User{
-		ID:        dbUser.ID,
-		CreatedAt: dbUser.CreatedAt,
-		UpdatedAt: dbUser.UpdatedAt,
-		Email:     dbUser.Email,
+		ID:          dbUser.ID,
+		CreatedAt:   dbUser.CreatedAt,
+		UpdatedAt:   dbUser.UpdatedAt,
+		Email:       dbUser.Email,
+		IsChirpyRed: dbUser.IsChirpyRed,
 	})
 }
 
@@ -107,6 +109,7 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		Email:        user.Email,
 		Token:        token,
 		RefreshToken: refreshToken,
+		IsChirpyRed:  user.IsChirpyRed,
 	})
 }
 
@@ -153,7 +156,6 @@ func (cfg *apiConfig) handlerRevokeToken(w http.ResponseWriter, r *http.Request)
 }
 
 func (cfg *apiConfig) handlerUpdateCredentials(w http.ResponseWriter, r *http.Request) {
-
 	// check authentication
 	token, err := auth.GetBearerToken(r.Header)
 	if err != nil {
@@ -192,9 +194,48 @@ func (cfg *apiConfig) handlerUpdateCredentials(w http.ResponseWriter, r *http.Re
 		respondWithError(w, http.StatusInternalServerError, "error updating user credentials")
 	}
 	respondWithJSON(w, http.StatusOK, User{
-		ID:        user.ID,
-		Email:     user.Email,
-		UpdatedAt: user.UpdatedAt,
-		CreatedAt: user.CreatedAt,
+		ID:          user.ID,
+		Email:       user.Email,
+		UpdatedAt:   user.UpdatedAt,
+		CreatedAt:   user.CreatedAt,
+		IsChirpyRed: user.IsChirpyRed,
 	})
+}
+
+func (cfg *apiConfig) handlerAddChirpyRed(w http.ResponseWriter, r *http.Request) {
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid API Key")
+		return
+	}
+
+	if apiKey != cfg.Polka_Key {
+		respondWithError(w, http.StatusUnauthorized, "invalid API Key")
+		return
+	}
+
+	type request struct {
+		Event string `json:"event"`
+		Data  struct {
+			UserID uuid.UUID `json:"user_id"`
+		} `json:"data"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	var req request
+	err = decoder.Decode(&req)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error decoding user credentials")
+		return
+	}
+
+	if req.Event != "user.upgraded" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	} else {
+		_, err := cfg.db.AddChirpyRed(r.Context(), req.Data.UserID)
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "unknown user ID")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
 }

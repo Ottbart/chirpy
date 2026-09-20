@@ -17,6 +17,7 @@ type apiConfig struct {
 	db             *database.Queries
 	Platform       string
 	Secret         string
+	Polka_Key      string
 }
 
 func main() {
@@ -32,7 +33,10 @@ func main() {
 	if secret == "" {
 		log.Fatal("SECRET must be set")
 	}
-
+	polkaKey := os.Getenv("POLKA_KEY")
+	if polkaKey == "" {
+		log.Fatal("POLKA_KEY must be set")
+	}
 	//open db connection
 	dbURL := os.Getenv("DB_URL")
 	dbConnect, err := sql.Open("postgres", dbURL)
@@ -46,6 +50,7 @@ func main() {
 		db:             dbQueries,
 		Platform:       platform,
 		Secret:         secret,
+		Polka_Key:      polkaKey,
 	}
 
 	//create http.Server
@@ -68,6 +73,8 @@ func main() {
 	mux.HandleFunc("POST /api/refresh", apiCfg.handlerRefreshToken)
 	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevokeToken)
 	mux.HandleFunc("PUT /api/users", apiCfg.handlerUpdateCredentials)
+	mux.HandleFunc("DELETE /api/chirps/{chirpID}", apiCfg.handlerDeleteChirp)
+	mux.HandleFunc("POST /api/polka/webhooks", apiCfg.handlerAddChirpyRed)
 
 	//start server
 	log.Println("Serving files from / on port 8080")
