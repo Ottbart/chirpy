@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -23,27 +24,41 @@ type Chirp struct {
 
 func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, r *http.Request) {
 	authorID := r.URL.Query().Get("author_id")
+	sortOrder := r.URL.Query().Get("sort")
 
+	var (
+		chirps []database.Chirp
+		err    error
+	)
 	// If no author_id is provided, retrieve all chirps
 	if authorID == "" {
-		chirps, err := cfg.db.GetAllChirps(r.Context())
-		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, "error getting chirps")
+		chirps, err = cfg.db.GetAllChirps(r.Context())
+	} else {
+		// An author_id was provided: validate and parse it
+		authorUuid, parseErr := uuid.Parse(authorID)
+		if parseErr != nil {
+			respondWithError(w, http.StatusBadRequest, "invalid author ID")
 			return
 		}
-		respondWithJSON(w, http.StatusOK, chirps)
+		// get chirps from author
+		chirps, err = cfg.db.GetChirpsByAuthor(r.Context(), authorUuid)
 	}
-
-	// An author_id was provided: validate and parse it
-	authorUuid, err := uuid.Parse(authorID)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "invalid author ID")
-		return
-	}
-	chirps, err := cfg.db.GetChirpsByAuthor(r.Context(), authorUuid)
+	//handle error when getting chirps from database
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "error getting chirps")
 		return
+	}
+
+	//handle sorting. If no sort order is given, no case will succeed
+	switch sortOrder {
+	case "asc":
+		sort.Slice(chirps, func(i, j int) bool {
+			return chirps[i].CreatedAt.Before(chirps[j].CreatedAt)
+		})
+	case "desc":
+		sort.Slice(chirps, func(i, j int) bool {
+			return chirps[i].CreatedAt.After(chirps[j].CreatedAt)
+		})
 	}
 	respondWithJSON(w, http.StatusOK, chirps)
 }
